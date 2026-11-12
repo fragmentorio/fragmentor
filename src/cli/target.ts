@@ -4,6 +4,7 @@ import { schemas as readSchemas } from "../build/source/read.js";
 import { getSchema } from "../model/schema.js";
 import type { Schema, Source } from "../model/types/index.js";
 import { flags, read } from "./fs.js";
+import { error } from "./color.js";
 
 /**
  * Parses a `pull` or `push` command's arguments ("<schema> [--root <dir>] [--document <path>]") and reads its project.
@@ -38,6 +39,6 @@ export function target(args: string[], verb: "pull" | "push"): { root: string; s
 }
 
 function fail(message: string): never {
-  console.error(message);
+  error(message);
   process.exit(1);
 }

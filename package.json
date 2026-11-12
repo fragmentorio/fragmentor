@@ -1,7 +1,7 @@
 {
   "name": "fragmentor",
   "version": "0.1.0",
-  "description": "The open-source build engine for Fragmentor — compile, optimize and deploy content-driven sites.",
+  "description": "The open-source build engine for Fragmentor.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/src/index.js",

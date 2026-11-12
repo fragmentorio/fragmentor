@@ -9,22 +9,44 @@ import { extension } from "../utils/mime.js";
 /* The folders that make up a Fragmentor project */
 export const FOLDERS = Object.keys(PROJECT);
 
+/* Sources by file, with the mtime and size they were read at (see `read`) */
+export type Cache = Map<string, { mtime: number; size: number; source: Source }>;
+
 /**
  * Reads all files in a project `root` into Source objects with the right paths. A file that isn't UTF-8 text (an image, a font, ...)
  * gets `data: null`, its bytes staying on disk (see `asset`), since decoding it as text would corrupt it.
+ * @param cache Reuses the Source of a file whose mtime and size are unchanged, so it isn't read again and is the same object (`dev` compares them to skip
+ *   rebuilds when nothing changed). Files gone since are dropped from it.
  */
-export function read(root: string): Source[] {
+export function read(root: string, cache?: Cache): Source[] {
   const out: Source[] = [];
+  const seen = new Set<string>();
   for (const folder of FOLDERS) {
     const dir = join(root, folder);
     if (!existsSync(dir)) continue;
     for (const file of walk(dir)) {
-      const rel = relative(dir, file).replace(/\\/g, "/");
+      const stat = statSync(file);
+      const hit = cache?.get(file);
+      seen.add(file);
+      if (hit && hit.mtime === stat.mtimeMs && hit.size === stat.size) {
+        out.push(hit.source);
+        continue;
+      }
       const bytes = readFileSync(file);
       const data = extension(bytes) === "txt" ? bytes.toString("utf8") : null;
-      out.push(source({ path: `/${folder}/${rel}`, data, size: bytes.length }));
+      /* Touched but not changed (an editor saving without edits, a git checkout): still the same Source */
+      if (hit && hit.size === stat.size && hit.source.data !== null && hit.source.data === data) {
+        cache!.set(file, { ...hit, mtime: stat.mtimeMs });
+        out.push(hit.source);
+        continue;
+      }
+      const rel = relative(dir, file).replace(/\\/g, "/");
+      const s = source({ path: `/${folder}/${rel}`, data, size: bytes.length, created_at: stat.birthtime.toISOString(), updated_at: stat.mtime.toISOString() });
+      cache?.set(file, { mtime: stat.mtimeMs, size: stat.size, source: s });
+      out.push(s);
     }
   }
+  if (cache) for (const file of cache.keys()) if (!seen.has(file)) cache.delete(file);
   return out;
 }
 

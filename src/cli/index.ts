@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { red } from "./color.js";
 
 const [, , command, ...args] = process.argv;
 
@@ -25,7 +26,7 @@ if (!command || command === "--help" || command === "-h") {
 }
 
 if (!(command in commands)) {
-  console.error(`Unknown command: ${command}`);
+  console.error(red(`Unknown command: ${command}`));
   console.error("Run `fragmentor --help` for available commands.");
   process.exit(1);
 }

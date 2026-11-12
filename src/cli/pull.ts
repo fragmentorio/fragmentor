@@ -4,6 +4,7 @@ import { pull } from "../sync/pull/index.js";
 import { plural } from "../utils/text.js";
 import { write } from "./fs.js";
 import { target } from "./target.js";
+import { error } from "./color.js";
 
 export async function run(args: string[]): Promise<void> {
   const { root, sources, schemas, schema, document } = target(args, "pull");
@@ -11,7 +12,7 @@ export async function run(args: string[]): Promise<void> {
   console.log(`Pulling "${schema._type}"...`);
   const { pulled, pruned, failed } = await pull({ schema, schemas, sources, document, fetch });
 
-  for (const f of failed) console.error(`  error: ${f.path}: ${f.error}`);
+  for (const f of failed) error(`  error: ${f.path}: ${f.error}`);
   write(pulled, root);
   for (const s of pruned) {
     try {
