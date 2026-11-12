@@ -1,0 +1,73 @@
+{
+  "name": "fragmentor",
+  "version": "0.1.0",
+  "description": "The open-source build engine for Fragmentor — compile, optimize and deploy content-driven sites.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "fragmentor": "./dist/src/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.map"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "test": "tsc --project tsconfig.json && node --test \"dist/src/**/*.test.js\"",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepublishOnly": "npm run clean && npm test"
+  },
+  "keywords": [
+    "cms",
+    "static-site-generator",
+    "build-tool",
+    "content",
+    "fragmentor"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fragmentorio/fragmentor.git"
+  },
+  "homepage": "https://fragmentor.io",
+  "bugs": {
+    "url": "https://github.com/fragmentorio/fragmentor/issues"
+  },
+  "dependencies": {
+    "jsep": "^1.4.0",
+    "jsonc-parser": "^3.3.1",
+    "linkedom": "^0.18.15",
+    "yaml": "^2.9.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "esbuild": "^0.28.2",
+    "sharp": "^0.35.5",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.25.0",
+    "sharp": ">=0.34.0"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    },
+    "sharp": {
+      "optional": true
+    }
+  }
+}
