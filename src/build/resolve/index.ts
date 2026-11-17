@@ -56,20 +56,20 @@ export function resolver({ references }: { references: Document[] }): (document:
   return (document) => link(document) as Resolve<Document>;
 }
 
-/* How many documents `complete` fills a non-nullable `references` field without a `max` with. Set a max to get more (or fewer) */
-export const DEFAULT_MAX_REFERENCES = 20;
+/* Past this many documents, filling an empty references field without a max is a warning: every page that renders it renders them all */
+export const MANY_REFERENCES = 100;
 
 /**
  * Walks a value against its field definitions, filling in any non-nullable `reference`/`references` field
  * left `null` with matching candidates from `references` (matching `field.allow` when set, capped at
- * `field.max` for `references`, or DEFAULT_MAX_REFERENCES without one), so `resolve` has something to resolve. Fragments are walked recursively
+ * `field.max` for `references`, or every match without one), so `resolve` has something to resolve. Fragments are walked recursively
  * using `schemas` to find their field definitions.
  * @param value The value to walk (document or fragment).
  * @param fields The field definitions for `value`.
  * @param schemas The list of all schemas, used for nested fragments.
  * @param references The candidate documents to fill non-nullable null references with.
  * @param path The keys from the document to `value`, to say where a field is in a warning.
- * @param warnings Collects a warning for every field DEFAULT_MAX_REFERENCES cut short.
+ * @param warnings Collects a warning for every field without a `max` filled with more than MANY_REFERENCES documents.
  * @returns The value with eligible null references filled in.
  */
 function completeProp(value: Record<string, unknown>, fields: Record<string, Fields>, schemas: Schema[], references: Document[], path: string[], warnings?: string[]): Record<string, unknown> {
@@ -84,11 +84,10 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
     } else if (field.type === "references") {
       if (prop === null && !field.nullable) {
         const candidates = references.filter(r => !field.allow.length || field.allow.includes(r._type));
-        const max = field.max ?? DEFAULT_MAX_REFERENCES;
-        result[key] = candidates.slice(0, max).map(r => ({ _ref: r._id }));
-        /* A field's own max is a choice, so only the default cap cutting documents off is worth a warning */
-        if (field.max === undefined && candidates.length > max) {
-          warning(`${[...path, key].join(".")}: Left empty, so filled with the first ${max} of ${candidates.length} matching documents. Set a max to choose how many, or nullable`, null, warnings);
+        result[key] = candidates.slice(0, field.max).map(r => ({ _ref: r._id }));
+        /* A field's own max is a choice, so only a large unbounded fill is worth a warning */
+        if (field.max === undefined && candidates.length > MANY_REFERENCES) {
+          warning(`${[...path, key].join(".")}: Null, so filled with all ${candidates.length} matching documents (set max to render fewer)`, null, warnings);
         }
       }
     } else if (field.type === "fragment" && isFragment(prop)) {
@@ -112,9 +111,9 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
  * @param document The document to complete.
  * @param schemas The list of all schemas, used to look up field definitions.
  * @param references The candidate documents to fill non-nullable null references with.
- * @param warnings Collects a warning for every `references` field without a `max` that had more matching documents than DEFAULT_MAX_REFERENCES.
+ * @param warnings Collects a warning for every `references` field without a `max` filled with more than MANY_REFERENCES documents.
  * @returns The document with eligible null references filled in.
- * @example complete({ document, schemas, references: documents, warnings }) // warnings: ["related: Left empty, so filled with the first 20 of 143 matching documents. ..."]
+ * @example complete({ document, schemas, references: documents, warnings }) // warnings: ["related: Null, so filled with all 143 matching documents (set max to render fewer)"]
  */
 export function complete({ document, schemas, references, warnings }: { document: Document; schemas: Schema[]; references: Document[]; errors?: string[]; warnings?: string[] }): Document {
   const def = getSchema({ schemas, type: document._type });

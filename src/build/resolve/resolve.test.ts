@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { complete, resolve, resolver, DEFAULT_MAX_REFERENCES } from "./index.js";
+import { complete, resolve, resolver, MANY_REFERENCES } from "./index.js";
 import type { Document, Schema } from "../../model/types/index.js";
 
 const doc = (_id: string, _type: string, data: Record<string, unknown> = {}) => ({ _id, _type, _path: `/${_id}.yml`, _extension: "yml", _hidden: false, _data: "", _size: 0, _raw: null, _created_at: "", _updated_at: "", ...data }) as Document;
@@ -38,15 +38,15 @@ test("complete: fills a non-nullable null reference with an allowed candidate, l
   assert.equal(out.editor, null);
 });
 
-test("complete: a non-nullable null references field gets up to `max` candidates, DEFAULT_MAX_REFERENCES without one", () => {
+test("complete: a non-nullable null references field gets up to `max` candidates, and every candidate without one", () => {
   const schema = { _type: "post", fields: {
     capped: { type: "references", allow: ["author"], max: 2, default: null },
     open: { type: "references", allow: ["author"], default: null },
   } } as unknown as Schema;
-  const authors = Array.from({ length: DEFAULT_MAX_REFERENCES + 5 }, (_, i) => doc(`a${i}`, "author"));
+  const authors = Array.from({ length: 50 }, (_, i) => doc(`a${i}`, "author"));
   const out = complete({ document: doc("p", "post", { capped: null, open: null }), schemas: [schema], references: [doc("x", "other"), ...authors] }) as Record<string, any>;
   assert.deepEqual(out.capped, [{ _ref: "a0" }, { _ref: "a1" }]);
-  assert.equal(out.open.length, DEFAULT_MAX_REFERENCES);
+  assert.equal(out.open.length, authors.length);
   assert.deepEqual(out.open[0], { _ref: "a0" });
 });
 
@@ -62,17 +62,26 @@ test("resolver: a document reached from two pages is the same object on both, as
   assert.equal(b.site.name, "Acme");
 });
 
-test("complete: warns where DEFAULT_MAX_REFERENCES cut a field short, not for a field's own max or when everything fit", () => {
+test("complete: warns where a field without a max is filled with more than MANY_REFERENCES documents, at any depth", () => {
   const card = { _type: "card", fields: { related: { type: "references", allow: ["author"], default: null } } } as unknown as Schema;
   const post = { _type: "post", fields: {
     open: { type: "references", allow: ["author"], default: null },
-    capped: { type: "references", allow: ["author"], max: 2, default: null },
+    capped: { type: "references", allow: ["author"], max: MANY_REFERENCES + 50, default: null },
     few: { type: "references", allow: ["other"], default: null },
     blocks: { type: "fragments", allow: ["card"], default: null },
   } } as unknown as Schema;
-  const authors = Array.from({ length: DEFAULT_MAX_REFERENCES + 5 }, (_, i) => doc(`a${i}`, "author"));
+  const authors = Array.from({ length: MANY_REFERENCES + 1 }, (_, i) => doc(`a${i}`, "author"));
   const warnings: string[] = [];
-  complete({ document: doc("p", "post", { open: null, capped: null, few: null, blocks: [{ _type: "card", related: null }] }), schemas: [post, card], references: [doc("x", "other"), ...authors], warnings });
-  const message = (at: string) => `${at}: Left empty, so filled with the first ${DEFAULT_MAX_REFERENCES} of ${authors.length} matching documents. Set a max to choose how many, or nullable`;
+  const out = complete({ document: doc("p", "post", { open: null, capped: null, few: null, blocks: [{ _type: "card", related: null }] }), schemas: [post, card], references: [doc("x", "other"), ...authors], warnings }) as Record<string, any>;
+  const message = (at: string) => `${at}: Null, so filled with all ${authors.length} matching documents (set max to render fewer)`;
   assert.deepEqual(warnings, [message("open"), message("blocks.0.related")]);
+  assert.equal(out.blocks[0].related.length, authors.length);
+});
+
+test("complete: filling a field without a max with up to MANY_REFERENCES documents is not a warning", () => {
+  const post = { _type: "post", fields: { open: { type: "references", allow: ["author"], default: null } } } as unknown as Schema;
+  const authors = Array.from({ length: MANY_REFERENCES }, (_, i) => doc(`a${i}`, "author"));
+  const warnings: string[] = [];
+  complete({ document: doc("p", "post", { open: null }), schemas: [post], references: authors, warnings });
+  assert.deepEqual(warnings, []);
 });

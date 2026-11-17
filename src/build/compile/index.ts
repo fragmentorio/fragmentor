@@ -69,9 +69,9 @@ export function compile(sources: Source[], { parse, dev = false, url, route, pub
   const types = [...builtins, ...schemas];
   /* Completed up front so null references fill in on referenced documents too (e.g. a Site's navigation), not only on the page */
   const completed = documents.map((d) => {
-    const cut: string[] = [];
-    const document = complete({ document: d, schemas: types, references: documents, warnings: cut }) as typeof d;
-    for (const message of cut) warnings.push({ path: `/documents${d._path}`, message });
+    const many: string[] = [];
+    const document = complete({ document: d, schemas: types, references: documents, warnings: many }) as typeof d;
+    for (const message of many) warnings.push({ path: `/documents${d._path}`, message });
     return document;
   });
   const pages = completed.filter((d) => (!route || d._slug === slug(route)) && components.some((c) => c._type === d._type));
