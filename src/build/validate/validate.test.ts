@@ -257,3 +257,20 @@ test("validate.fields: a references default is cut to max and a short one only r
     "fields.body: Field default length 0 is less than min 1",
   ]);
 });
+
+test("validate.fields: a min or max of 0 is checked like any other", () => {
+  const errors: string[] = [];
+  const fields = validate.fields({ errors, fields: {
+    code: { type: "string", max: 0, default: "x" } as Fields,
+    count: { type: "number", min: 0, default: -1 } as Fields,
+    tags: { type: "fragments", allow: ["tag"], max: 0, default: [{ _type: "tag" }] } as Fields,
+  } });
+  assert.equal(fields.code.default, "");
+  assert.equal(fields.count.default, 0);
+  assert.deepEqual(fields.tags.default, []);
+  assert.deepEqual(errors, [
+    "fields.code: Field default length 1 is greater than max 0",
+    "fields.count: Field default -1 is less than min 0",
+    "fields.tags: Field default length 1 is greater than max 0",
+  ]);
+});
