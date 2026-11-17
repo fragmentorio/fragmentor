@@ -84,11 +84,11 @@ export function slug(path: string): string {
 /**
  * The "/index" file path for a slug, the counterpart of `slug`. A slug can also live at the path itself
  * ("/about" may be "/about" or "/about/index"), so check which one exists when looking a file up.
- * @example path("/about") // "/about/index"
- * @example path("/") // "/index"
- * @example path("/about/index") // "/about/index"
+ * @example file("/about") // "/about/index"
+ * @example file("/") // "/index"
+ * @example file("/about/index") // "/about/index"
  */
-export function path(slug: string): string {
+export function file(slug: string): string {
   return slug.endsWith("/index") ? slug : `${slug.replace(/\/$/, "")}/index`;
 }
 
