@@ -37,6 +37,12 @@ const UNARY: Record<string, (a: unknown) => unknown> = {
   typeof: (a) => typeof a,
 };
 
+/*
+ * Array methods that change the array in place. They're called on a copy instead, so they give the same result ("a/b".split("/").pop()
+ * is still "b") without changing the data, which may be shared by every page of a build (see `render`).
+ */
+const MUTATING = new Set(["sort", "reverse", "splice", "push", "pop", "shift", "unshift", "fill", "copyWithin"]);
+
 /** Reads `obj[key]`, blocking prototype escapes like `x.constructor.constructor("return process")()`. */
 function member(obj: unknown, key: unknown): unknown {
   return obj == null || BLOCKED.has(String(key)) ? undefined : (obj as Record<string, unknown>)[String(key)];
@@ -60,8 +66,10 @@ function node(n: jsep.Expression, scope: Record<string, unknown>): unknown {
       const args = c.arguments.map((a) => node(a, scope));
       if (c.callee.type === "MemberExpression") {
         const m = c.callee as jsep.MemberExpression;
-        const obj = node(m.object, scope);
-        const fn = member(obj, m.computed ? node(m.property, scope) : (m.property as jsep.Identifier).name);
+        const target = node(m.object, scope);
+        const name = m.computed ? node(m.property, scope) : (m.property as jsep.Identifier).name;
+        const obj = Array.isArray(target) && MUTATING.has(String(name)) ? [...target] : target;
+        const fn = member(obj, name);
         return typeof fn === "function" ? fn.call(obj, ...args) : undefined;
       }
       const fn = node(c.callee, scope);
@@ -90,6 +98,39 @@ function node(n: jsep.Expression, scope: Record<string, unknown>): unknown {
   }
 }
 
+/*
+ * Every expression parsed so far by its source (null when it doesn't parse), and whether it reads `$`: a template's few expressions
+ * are evaluated thousands of times. Emptied past MAX_PARSED, so a long-running server building many projects doesn't grow it forever.
+ */
+const MAX_PARSED = 10_000;
+const parsed = new Map<string, { ast: jsep.Expression; rooted: boolean } | null>();
+
+/* Whether an AST reads `$` anywhere */
+const roots = (n: unknown): boolean => n !== null && typeof n === "object" && ((n as jsep.Expression).type === "Identifier" ? (n as jsep.Identifier).name === "$" : Object.values(n).some(roots));
+
+/* The parsed expression, from `parsed` after the first time */
+function parse(expr: string) {
+  if (!parsed.has(expr)) {
+    if (parsed.size >= MAX_PARSED) parsed.clear();
+    try {
+      const ast = jsep(expr);
+      parsed.set(expr, { ast, rooted: roots(ast) });
+    } catch {
+      parsed.set(expr, null);
+    }
+  }
+  return parsed.get(expr)!;
+}
+
+/**
+ * Whether an expression reads `$`, the top-level value, so its result can differ between pages that render the same data.
+ * @example isRooted("$.site.name") // true
+ * @example isRooted("title") // false
+ */
+export function isRooted(expr: string): boolean {
+  return parse(expr)?.rooted ?? false;
+}
+
 /**
  * Evaluates a directive's expression against `data`, safely (see the supported grammar above).
  * @param root The top-level value being rendered (the document or fragment passed to `render`, usually a page), reachable as
@@ -100,8 +141,10 @@ function node(n: jsep.Expression, scope: Record<string, unknown>): unknown {
  * @example evaluate("$.title", {}, { title: "Home" }) // "Home"
  */
 export function evaluate(expr: string, data: Record<string, unknown>, root?: Record<string, unknown>): unknown {
+  const expression = parse(expr);
+  if (!expression) return undefined;
   try {
-    return node(jsep(expr), root ? { ...data, $: root } : data);
+    return node(expression.ast, root ? { ...data, $: root } : data);
   } catch {
     return undefined;
   }

@@ -7,6 +7,7 @@ import { compile, type Parser } from "./index.js";
 import { MAX_DEPTH } from "./render.js";
 import { paths, pointers } from "./annotate.js";
 import { evaluate } from "./directives.js";
+import { isRooted } from "../../utils/expression.js";
 
 /* linkedom only loads as ESM, so it's imported dynamically from this CommonJS package */
 let parse: Parser;
@@ -383,4 +384,17 @@ test("compile: a page past MAX_ELEMENTS elements is a warning on its document, a
   const { warnings } = build(sources);
   assert.deepEqual(warnings.map((w) => w.path), ["/documents/big.json"]);
   assert.match(warnings[0].message, new RegExp(`^The page has ${MAX_ELEMENTS + 1} elements`));
+});
+
+test("evaluate: an array method that changes its array runs on a copy, with the same result and the data left as it was", () => {
+  const data = { items: [3, 1, 2], path: "a/b" };
+  assert.deepEqual(evaluate("items.sort()", data), [1, 2, 3]);
+  assert.deepEqual(evaluate("items.reverse()", data), [2, 1, 3]);
+  assert.equal(evaluate("items.pop()", data), 2);
+  assert.equal(evaluate("path.split('/').pop()", data), "b");
+  assert.deepEqual(data.items, [3, 1, 2]);
+});
+
+test("isRooted: an expression reading `$` anywhere is rooted, one reading only its data isn't", () => {
+  assert.deepEqual(["$.title", "title || $.name", "items[$.index]", "title", "'$'", "broken("].map(isRooted), [true, true, true, false, false, false]);
 });
