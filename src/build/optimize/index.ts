@@ -68,8 +68,9 @@ async function variants(sharp: Sharp, bytes: Buffer): Promise<{ path: string; wi
 export async function optimize<T extends File>(files: Record<string, T>, { parse, read }: { parse: Parser; read?: (path: string) => Promise<Buffer> }): Promise<{ files: Record<string, T | Buffer>; warnings: string[] }> {
   const out: Record<string, T | Buffer> = { ...files };
   const warnings: string[] = [];
-  const esbuild = await import("esbuild").catch(() => null);
-  const sharp = await import("sharp").then((m) => m.default).catch(() => null);
+  /* Ignored by bundlers, so an app that bundles fragmentor for the browser doesn't pull in these Node-only packages */
+  const esbuild = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ "esbuild").catch(() => null);
+  const sharp = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ "sharp").then((m) => m.default).catch(() => null);
   if (!esbuild) warnings.push("esbuild isn't installed, so CSS and JS aren't minified");
   if (!sharp) warnings.push("sharp isn't installed, so images aren't optimized");
 
