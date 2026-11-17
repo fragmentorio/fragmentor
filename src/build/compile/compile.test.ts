@@ -398,3 +398,28 @@ test("evaluate: an array method that changes its array runs on a copy, with the 
 test("isRooted: an expression reading `$` anywhere is rooted, one reading only its data isn't", () => {
   assert.deepEqual(["$.title", "title || $.name", "items[$.index]", "title", "'$'", "broken("].map(isRooted), [true, true, true, false, false, false]);
 });
+
+test("compile: a fragment that several pages render the same way renders once, and again where a `$` it reads differs", () => {
+  const sources = (titles: string[]) => [
+    ...schemas,
+    file("components/page.html", `<h1 x-bind="title"></h1><div x-bind="author"></div>`),
+    file("components/author.html", `<p class="byline"><b x-bind="name"></b> <i x-bind="$.title === 'Home' ? 'home' : 'other'"></i></p>`),
+    file("documents/ada.json", JSON.stringify({ _type: "author", name: "Ada" })),
+    ...titles.map((title, i) => file(`documents/p${i}.json`, JSON.stringify({ _type: "page", title, author: { _ref: "/documents/ada" } }))),
+  ];
+  /* Parses of the author template: once to extract its assets, once for ada's own page, then once per nested render */
+  const count = (titles: string[]) => {
+    let renders = 0;
+    const { output } = compile(sources(titles), { parse: (html) => (html.includes("byline") && renders++, parse(html)) });
+    return { renders: renders - 2, pages: titles.map((_, i) => output.find((s) => s.path === `/p${i}/index.html`)?.data) };
+  };
+
+  const same = count(["A", "B", "C"]);
+  assert.equal(same.renders, 1);
+  for (const html of same.pages) assert.match(String(html), /<b>Ada<\/b> <i>other<\/i>/);
+
+  const differs = count(["Home", "B", "C"]);
+  assert.equal(differs.renders, 2);
+  assert.match(String(differs.pages[0]), /<i>home<\/i>/);
+  assert.match(String(differs.pages[1]), /<i>other<\/i>/);
+});

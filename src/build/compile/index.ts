@@ -3,11 +3,12 @@ import { builtins } from "../builtins.js";
 import { read, source } from "../source/index.js";
 import { folder, parse as parsePath, path, slug } from "../../utils/path.js";
 import { lint } from "../lint/index.js";
-import { complete, resolve } from "../resolve/index.js";
+import { complete, resolver } from "../resolve/index.js";
 import type { Source } from "../../model/types/index.js";
 import { bundle } from "./assets.js";
 import { robots, sitemap, stamp } from "./generate.js";
 import { render, type Parser } from "./render.js";
+import { Memo } from "./memo.js";
 
 /** Whether a source is a document file without `_type`: plain data that references can still point at, so it's no error to build with (even though `write.document` refuses to write one). */
 function plain(source: Source): boolean {
@@ -35,9 +36,10 @@ export type Compiled = {
  * Compiles a project's sources into the files of its site, with no filesystem access so it runs anywhere:
  * 1. Reads schemas, documents, components and assets (`read.*`). Every problem `lint` finds in a file is listed in `errors` or `warnings` (except for a document
  *    without `_type`, which is plain data), but the file is still read leniently (invalid values replaced by defaults) so one bad field doesn't drop a page.
- * 2. Links each document's references (`complete`, then `resolve`). Its `_slug` is its route ("/blog/index.yml" -> "/blog").
+ * 2. Links each document's references (`complete`, then `resolver`, shared by every page). Its `_slug` is its route ("/blog/index.yml" -> "/blog").
  * 3. Renders a page for every visible document (every document in dev) whose _type has a component (see `render`), at "<slug>/index.html". With a `route`, only that one.
  *    A page with more than MAX_ELEMENTS elements gets a warning (see `heaviness`).
+ *    Outside dev, a fragment that several pages render the same way is rendered once (see `Memo`).
  * 4. Bundles each page (see `bundle`): its styles joined into one "/_styles/<hash>.css", its scripts each at "/_scripts/<hash>.js", all linked from the page.
  * 5. Stamps each page (see `stamp`): a "Made with Fragmentor" comment at the top, with `published` when it was published.
  * 6. With a `url`, generates "/sitemap.xml" and "/robots.txt" (see `sitemap` and `robots`).
@@ -69,12 +71,15 @@ export function compile(sources: Source[], { parse, dev = false, url, route, pub
   const completed = documents.map((d) => complete({ document: d, schemas: types, references: documents }) as typeof d);
   const pages = completed.filter((d) => (!route || d._slug === slug(route)) && components.some((c) => c._type === d._type));
 
+  /* Resolved through one resolver, a document reached from many pages is one object, so the memo renders it once (see `Memo`) */
+  const resolve = resolver({ references: completed });
+  const memo = dev ? undefined : new Memo();
   const output = new Map<string, Source>();
   const emit = (file: Source) => output.set(file.path, file);
   for (const document of pages) {
     try {
-      const page = resolve({ document, references: completed });
-      const { html, assets } = bundle(render(page, components, parse, { dev, schemas }));
+      const page = resolve(document);
+      const { html, assets } = bundle(render(page, components, parse, { dev, schemas, memo }));
       const heavy = heaviness(html);
       if (heavy) warnings.push({ path: `/documents${document._path}`, message: heavy });
       emit(source({ path: `${path(document._slug)}.html`, data: stamp(html, { published }) }));
