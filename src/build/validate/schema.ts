@@ -35,7 +35,7 @@ export function validateField<T extends Fields>({ field, path = [], errors, warn
   /* `complete` fills such a field, when left null, with up to DEFAULT_MAX_REFERENCES documents: on a site-wide fragment that's that many cards on every page */
   if (field.type === "references" && !field.nullable && field.max === undefined) {
     const at = path.length ? `${path.join(".")}: ` : "";
-    warning(`${at}Left empty, this references field is filled with up to ${DEFAULT_MAX_REFERENCES} matching documents. Set a max to choose how many, or nullable: true to keep it empty`, null, warnings);
+    warning(`${at}Left empty, this references field is filled with up to ${DEFAULT_MAX_REFERENCES} matching documents. Set a max to choose how many, or nullable`, null, warnings);
   }
 
   if ("min" in field && "max" in field && field.min !== undefined && field.max !== undefined && field.min > field.max) {

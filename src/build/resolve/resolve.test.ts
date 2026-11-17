@@ -73,6 +73,6 @@ test("complete: warns where DEFAULT_MAX_REFERENCES cut a field short, not for a 
   const authors = Array.from({ length: DEFAULT_MAX_REFERENCES + 5 }, (_, i) => doc(`a${i}`, "author"));
   const warnings: string[] = [];
   complete({ document: doc("p", "post", { open: null, capped: null, few: null, blocks: [{ _type: "card", related: null }] }), schemas: [post, card], references: [doc("x", "other"), ...authors], warnings });
-  const message = (at: string) => `${at}: Left empty, so filled with the first ${DEFAULT_MAX_REFERENCES} of ${authors.length} matching documents. Set a max to choose how many, or nullable: true to keep it empty`;
+  const message = (at: string) => `${at}: Left empty, so filled with the first ${DEFAULT_MAX_REFERENCES} of ${authors.length} matching documents. Set a max to choose how many, or nullable`;
   assert.deepEqual(warnings, [message("open"), message("blocks.0.related")]);
 });

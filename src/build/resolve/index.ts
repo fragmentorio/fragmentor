@@ -88,7 +88,7 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
         result[key] = candidates.slice(0, max).map(r => ({ _ref: r._id }));
         /* A field's own max is a choice, so only the default cap cutting documents off is worth a warning */
         if (field.max === undefined && candidates.length > max) {
-          warning(`${[...path, key].join(".")}: Left empty, so filled with the first ${max} of ${candidates.length} matching documents. Set a max to choose how many, or nullable: true to keep it empty`, null, warnings);
+          warning(`${[...path, key].join(".")}: Left empty, so filled with the first ${max} of ${candidates.length} matching documents. Set a max to choose how many, or nullable`, null, warnings);
         }
       }
     } else if (field.type === "fragment" && isFragment(prop)) {
