@@ -14,6 +14,17 @@ function plain(source: Source): boolean {
   return folder(source.path) === "documents" && declared(source) === undefined;
 }
 
+/* Lighthouse flags a page with more elements than this ("Avoid an excessive DOM size"), and it's usually a data mistake, like a large references field on a fragment shown on every page */
+export const MAX_ELEMENTS = 1400;
+
+/* A warning when a page's HTML has more than MAX_ELEMENTS elements (counted by their opening tags), else null */
+function heaviness(html: string): string | null {
+  let elements = 0;
+  for (const _ of html.matchAll(/<[a-zA-Z]/g)) elements++;
+  if (elements <= MAX_ELEMENTS) return null;
+  return `The page has ${elements} elements, over the ${MAX_ELEMENTS} Lighthouse flags, which slows the page and the build. Check for a large references field on a fragment shown on every page`;
+}
+
 export type Compiled = {
   output: Source[];
   errors: { path: string; message: string }[];
@@ -26,6 +37,7 @@ export type Compiled = {
  *    without `_type`, which is plain data), but the file is still read leniently (invalid values replaced by defaults) so one bad field doesn't drop a page.
  * 2. Links each document's references (`complete`, then `resolve`). Its `_slug` is its route ("/blog/index.yml" -> "/blog").
  * 3. Renders a page for every visible document (every document in dev) whose _type has a component (see `render`), at "<slug>/index.html". With a `route`, only that one.
+ *    A page with more than MAX_ELEMENTS elements gets a warning (see `heaviness`).
  * 4. Bundles each page (see `bundle`): its styles joined into one "/_styles/<hash>.css", its scripts each at "/_scripts/<hash>.js", all linked from the page.
  * 5. Stamps each page (see `stamp`): a "Made with Fragmentor" comment at the top, with `published` when it was published.
  * 6. With a `url`, generates "/sitemap.xml" and "/robots.txt" (see `sitemap` and `robots`).
@@ -63,6 +75,8 @@ export function compile(sources: Source[], { parse, dev = false, url, route, pub
     try {
       const page = resolve({ document, references: completed });
       const { html, assets } = bundle(render(page, components, parse, { dev, schemas }));
+      const heavy = heaviness(html);
+      if (heavy) warnings.push({ path: `/documents${document._path}`, message: heavy });
       emit(source({ path: `${path(document._slug)}.html`, data: stamp(html, { published }) }));
       for (const [at, data] of Object.entries(assets)) emit(source({ path: at, data }));
     } catch (e) {

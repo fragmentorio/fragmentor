@@ -369,3 +369,18 @@ test("compile: x-bind:attr on an x-for element reads each item, x-if there reads
   ];
   assert.equal(page(sources, "/index.html"), `<ul><li title="Home" data-q="A"></li><li title="Home" data-q="B"></li></ul><p id="A"></p>`);
 });
+
+test("compile: a page past MAX_ELEMENTS elements is a warning on its document, a normal one isn't", async () => {
+  const { MAX_ELEMENTS } = await import("./index.js");
+  const faqs = (n: number) => Array.from({ length: n }, () => ({ _type: "faq", question: "?" }));
+  const sources = [
+    ...schemas,
+    file("components/page.html", `<div x-bind="sections"></div>`),
+    file("components/faq.html", `<b x-bind="question"></b>`),
+    file("documents/big.json", JSON.stringify({ _type: "page", sections: faqs(MAX_ELEMENTS) })),
+    file("documents/small.json", JSON.stringify({ _type: "page", sections: faqs(MAX_ELEMENTS - 1) })),
+  ];
+  const { warnings } = build(sources);
+  assert.deepEqual(warnings.map((w) => w.path), ["/documents/big.json"]);
+  assert.match(warnings[0].message, new RegExp(`^The page has ${MAX_ELEMENTS + 1} elements`));
+});

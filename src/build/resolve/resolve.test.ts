@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { complete, resolve } from "./index.js";
+import { complete, resolve, DEFAULT_MAX_REFERENCES } from "./index.js";
 import type { Document, Schema } from "../../model/types/index.js";
 
 const doc = (_id: string, _type: string, data: Record<string, unknown> = {}) => ({ _id, _type, _path: `/${_id}.yml`, _extension: "yml", _hidden: false, _data: "", _size: 0, _raw: null, _created_at: "", _updated_at: "", ...data }) as Document;
@@ -36,4 +36,16 @@ test("complete: fills a non-nullable null reference with an allowed candidate, l
   const out = complete({ document: doc("p", "post", { author: null, editor: null }), schemas: [schema], references: [doc("x", "other"), ada] });
   assert.deepEqual(out.author, { _ref: "ada" });
   assert.equal(out.editor, null);
+});
+
+test("complete: a non-nullable null references field gets up to `max` candidates, DEFAULT_MAX_REFERENCES without one", () => {
+  const schema = { _type: "post", fields: {
+    capped: { type: "references", allow: ["author"], max: 2, default: null },
+    open: { type: "references", allow: ["author"], default: null },
+  } } as unknown as Schema;
+  const authors = Array.from({ length: DEFAULT_MAX_REFERENCES + 5 }, (_, i) => doc(`a${i}`, "author"));
+  const out = complete({ document: doc("p", "post", { capped: null, open: null }), schemas: [schema], references: [doc("x", "other"), ...authors] }) as Record<string, any>;
+  assert.deepEqual(out.capped, [{ _ref: "a0" }, { _ref: "a1" }]);
+  assert.equal(out.open.length, DEFAULT_MAX_REFERENCES);
+  assert.deepEqual(out.open[0], { _ref: "a0" });
 });

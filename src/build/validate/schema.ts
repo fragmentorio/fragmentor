@@ -2,6 +2,7 @@ import { EmailSchema, Fields, FieldSchema, Fragment, Schema, isFragment, isFragm
 import { error, warning } from "../../utils/report.js";
 import { empty } from "../../model/schema.js";
 import { rejects } from "./document.js";
+import { DEFAULT_MAX_REFERENCES } from "../resolve/index.js";
 
 /**
  * Validates a single field value considering all schemas.
@@ -29,6 +30,12 @@ export function validateField<T extends Fields>({ field, path = [], errors, warn
   if (field.default === null && field.type !== "reference" && field.type !== "references") {
     if (field.nullable) return field;
     (field as { default?: unknown }).default = fail(`Field default can only be null when the field is nullable`, empty(field));
+  }
+
+  /* `complete` fills such a field, when left null, with up to DEFAULT_MAX_REFERENCES documents: on a site-wide fragment that's that many cards on every page */
+  if (field.type === "references" && !field.nullable && field.max === undefined) {
+    const at = path.length ? `${path.join(".")}: ` : "";
+    warning(`${at}Left empty, this references field is filled with up to ${DEFAULT_MAX_REFERENCES} matching documents. Set a max to choose how many, or nullable: true to keep it empty`, null, warnings);
   }
 
   if ("min" in field && "max" in field && field.min !== undefined && field.max !== undefined && field.min > field.max) {
