@@ -42,10 +42,13 @@ export function resolve({ document, references }: { document: Document; referenc
   return link(document) as Resolve<Document>;
 }
 
+/* How many documents `complete` fills a non-nullable `references` field without a `max` with. Set a max to get more (or fewer) */
+export const DEFAULT_MAX_REFERENCES = 20;
+
 /**
  * Walks a value against its field definitions, filling in any non-nullable `reference`/`references` field
  * left `null` with matching candidates from `references` (matching `field.allow` when set, capped at
- * `field.max` for `references`), so `resolve` has something to resolve. Fragments are walked recursively
+ * `field.max` for `references`, or DEFAULT_MAX_REFERENCES without one), so `resolve` has something to resolve. Fragments are walked recursively
  * using `schemas` to find their field definitions.
  * @param value The value to walk (document or fragment).
  * @param fields The field definitions for `value`.
@@ -65,7 +68,7 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
     } else if (field.type === "references") {
       if (prop === null && !field.nullable) {
         const candidates = references.filter(r => !field.allow.length || field.allow.includes(r._type));
-        result[key] = (field.max !== undefined ? candidates.slice(0, field.max) : candidates).map(r => ({ _ref: r._id }));
+        result[key] = candidates.slice(0, field.max ?? DEFAULT_MAX_REFERENCES).map(r => ({ _ref: r._id }));
       }
     } else if (field.type === "fragment" && isFragment(prop)) {
       const def = getSchema({ schemas, type: prop._type });
