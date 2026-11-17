@@ -1,7 +1,7 @@
 import { declared } from "../decode/index.js";
 import { builtins } from "../builtins.js";
 import { read, source } from "../source/index.js";
-import { folder, parse as parsePath, path, slug } from "../../utils/path.js";
+import { file, folder, parse as parsePath, slug } from "../../utils/path.js";
 import { lint } from "../lint/index.js";
 import { complete, resolver } from "../resolve/index.js";
 import type { Source } from "../../model/types/index.js";
@@ -87,7 +87,7 @@ export function compile(sources: Source[], { parse, dev = false, url, route, pub
       const { html, assets } = bundle(render(page, components, parse, { dev, schemas, memo }));
       const heavy = heaviness(html);
       if (heavy) warnings.push({ path: `/documents${document._path}`, message: heavy });
-      emit(source({ path: `${path(document._slug)}.html`, data: stamp(html, { published }) }));
+      emit(source({ path: `${file(document._slug)}.html`, data: stamp(html, { published }) }));
       for (const [at, data] of Object.entries(assets)) emit(source({ path: at, data }));
     } catch (e) {
       errors.push({ path: `/documents${document._path}`, message: (e as Error).message });

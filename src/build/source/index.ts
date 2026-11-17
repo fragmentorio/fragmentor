@@ -8,7 +8,7 @@ import { FOLDERS } from "./folders.js";
 import * as write from "./write.js";
 
 /* The path helpers live in utils/path.ts, re-exported here as part of the source API */
-export { parse, format, folder, inside, slug, path, type, chain } from "../../utils/path.js";
+export { parse, format, folder, inside, slug, file, type, chain } from "../../utils/path.js";
 
 /**
  * Builds a Source from a file's `path` and raw `data`, with no filesystem access so it runs anywhere.

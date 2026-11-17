@@ -1,5 +1,5 @@
 import { read } from "../source/index.js";
-import { folder, path } from "../../utils/path.js";
+import { file, folder } from "../../utils/path.js";
 import { refs } from "../../model/fragment.js";
 import { keyOf, getSchema } from "../../model/schema.js";
 import type { Document, Schema, Source } from "../../model/types/index.js";
@@ -22,7 +22,7 @@ export function lint({ sources, paths }: { sources: Source[]; paths?: string[] }
   const holders = new Map<string, string[]>();
   for (const d of documents) for (const c of claims(d, schemas)) holders.set(c.id, [...(holders.get(c.id) ?? []), `/documents${d._path}`]);
   const ids = new Set(documents.map((d) => d._id));
-  const pages = new Map(documents.map((d) => [`${path(d._slug)}.html`, `/documents${d._path}`]));
+  const pages = new Map(documents.map((d) => [`${file(d._slug)}.html`, `/documents${d._path}`]));
 
   return sources.filter((s) => !paths || paths.includes(s.path)).map((source) => {
     const errors: string[] = [];
