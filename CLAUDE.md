@@ -18,6 +18,7 @@ The open-source build engine for Fragmentor, published to npm as `fragmentor`. R
 - **`src/sync/`** pulls and pushes documents from and to external APIs.
 - **`src/cli/`** is the `fragmentor` command: one file per command, loaded on demand.
 - **`src/utils/`** holds small helpers shared across the rest.
+- **`src/api/`** holds one file per public namespace, each only re-exporting internal functions under their public names.
 
 ## Commands
 
@@ -30,7 +31,9 @@ The open-source build engine for Fragmentor, published to npm as `fragmentor`. R
 - **Keep the build deterministic.** Anything that changes between runs comes in from the caller. Example: `compile` takes `published` as an option instead of calling `new Date()`.
 - **Keep esbuild and sharp optional.** Load them with a dynamic `import()` that falls back when they're missing, and never import them statically. Example: `optimize` skips minifying when `await import("esbuild").catch(() => null)` is null.
 - **Add a runtime dependency only when there's no reasonable way without it.** Every dependency ships to every user and to the browser. Example: path handling stays in our own utilities, not a new package.
-- **Export only what the public entry point lists.** Anything new that users need is added there under the matching group, and everything else stays internal. Example: a new pipeline stage gets a line under `/* Build */` in the entry point.
+- **Export only what the public entry point lists.** Anything new that users need is added there under the matching group, and everything else stays internal. Example: a new pipeline stage gets a line under `/* Pipeline */` in the entry point.
+- **Group exports in a namespace only when there are several things to do with one noun.** A single action stays flat; a namespace is an `export * as` of a file that only re-exports. Example: `document.read`, `document.write`, `path.slug`, but `compile` and `source({ path, data })`, not `source.create`.
+- **Give every public export a one-word name.** Use a verb for an action and a noun for what a pure getter returns, never a camelCase name; keep a function internal when it has no good one-word name. Example: `read`, `compile`, `path.slug`, `path.allowed`; not `readAll` or `getSlug`.
 - **Use `.js` extensions in relative imports.** The project compiles as Node16 ES modules. Example: `import { parse } from "../../utils/path.js";`.
 
 ## Code
