@@ -61,3 +61,18 @@ test("resolver: a document reached from two pages is the same object on both, as
   assert.equal(a.next, b);
   assert.equal(b.site.name, "Acme");
 });
+
+test("complete: warns where DEFAULT_MAX_REFERENCES cut a field short, not for a field's own max or when everything fit", () => {
+  const card = { _type: "card", fields: { related: { type: "references", allow: ["author"], default: null } } } as unknown as Schema;
+  const post = { _type: "post", fields: {
+    open: { type: "references", allow: ["author"], default: null },
+    capped: { type: "references", allow: ["author"], max: 2, default: null },
+    few: { type: "references", allow: ["other"], default: null },
+    blocks: { type: "fragments", allow: ["card"], default: null },
+  } } as unknown as Schema;
+  const authors = Array.from({ length: DEFAULT_MAX_REFERENCES + 5 }, (_, i) => doc(`a${i}`, "author"));
+  const warnings: string[] = [];
+  complete({ document: doc("p", "post", { open: null, capped: null, few: null, blocks: [{ _type: "card", related: null }] }), schemas: [post, card], references: [doc("x", "other"), ...authors], warnings });
+  const message = (at: string) => `${at}: Left empty, so filled with the first ${DEFAULT_MAX_REFERENCES} of ${authors.length} matching documents. Set a max to choose how many, or nullable: true to keep it empty`;
+  assert.deepEqual(warnings, [message("open"), message("blocks.0.related")]);
+});
