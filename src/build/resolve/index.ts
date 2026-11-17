@@ -87,7 +87,7 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
         result[key] = candidates.slice(0, field.max).map(r => ({ _ref: r._id }));
         /* A field's own max is a choice, so only a large unbounded fill is worth a warning */
         if (field.max === undefined && candidates.length > MANY_REFERENCES) {
-          warning(`${[...path, key].join(".")}: Left empty, so filled with all ${candidates.length} matching documents. Set a max to render fewer, or make it nullable`, null, warnings);
+          warning(`${[...path, key].join(".")}: Null, so filled with all ${candidates.length} matching documents. Give it a max to render fewer, or make it nullable`, null, warnings);
         }
       }
     } else if (field.type === "fragment" && isFragment(prop)) {
@@ -113,7 +113,7 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
  * @param references The candidate documents to fill non-nullable null references with.
  * @param warnings Collects a warning for every `references` field without a `max` filled with more than MANY_REFERENCES documents.
  * @returns The document with eligible null references filled in.
- * @example complete({ document, schemas, references: documents, warnings }) // warnings: ["related: Left empty, so filled with all 143 matching documents. ..."]
+ * @example complete({ document, schemas, references: documents, warnings }) // warnings: ["related: Null, so filled with all 143 matching documents. ..."]
  */
 export function complete({ document, schemas, references, warnings }: { document: Document; schemas: Schema[]; references: Document[]; errors?: string[]; warnings?: string[] }): Document {
   const def = getSchema({ schemas, type: document._type });

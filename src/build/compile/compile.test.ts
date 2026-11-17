@@ -435,6 +435,6 @@ test("compile: a references field without a max is filled with every matching do
   ];
   const { warnings, output } = build(sources);
   assert.deepEqual(warnings.map((w) => w.path), ["/documents/list.json"]);
-  assert.match(warnings[0].message, new RegExp(`^items: Left empty, so filled with all ${MANY_REFERENCES + 1} matching documents`));
+  assert.match(warnings[0].message, new RegExp(`^items: Null, so filled with all ${MANY_REFERENCES + 1} matching documents`));
   assert.match(String(output.find((s) => s.path === "/list/index.html")?.data), new RegExp(`<p>${MANY_REFERENCES + 1}</p>`));
 });
