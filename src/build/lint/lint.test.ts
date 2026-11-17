@@ -100,3 +100,10 @@ test("lint: two documents serving the same route is an error on both, whatever t
   const results = lint({ sources: [post, a, b, c], paths: [a.path, b.path, c.path] });
   assert.deepEqual(results.map((r) => r.errors), [['Route "/about" is also used by /documents/about/index.md'], ['Route "/about" is also used by /documents/about.yml'], []]);
 });
+
+test("lint: a non-nullable references field without a max is a warning on its schema, since left empty it's filled with up to DEFAULT_MAX_REFERENCES documents", () => {
+  const fields = { all: { type: "references", allow: [] }, capped: { type: "references", allow: [], max: 3 }, optional: { type: "references", allow: [], nullable: true } };
+  const [result] = lint({ sources: [source({ path: "schemas/Related.json", data: JSON.stringify({ fields }) })] });
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.warnings, ["fields.all: Left empty, this references field is filled with up to 20 matching documents. Set a max to choose how many, or nullable: true to keep it empty"]);
+});
