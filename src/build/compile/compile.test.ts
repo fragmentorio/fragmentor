@@ -423,3 +423,18 @@ test("compile: a fragment that several pages render the same way renders once, a
   assert.match(String(differs.pages[0]), /<i>home<\/i>/);
   assert.match(String(differs.pages[1]), /<i>other<\/i>/);
 });
+
+test("compile: a references field cut short by DEFAULT_MAX_REFERENCES is a warning on its document", async () => {
+  const { DEFAULT_MAX_REFERENCES } = await import("../resolve/index.js");
+  const sources = [
+    file("schemas/list.json", JSON.stringify({ fields: { items: { type: "references", allow: ["item"] } } })),
+    file("schemas/item.json", JSON.stringify({ fields: {} })),
+    file("components/list.html", `<p></p>`),
+    file("documents/list.json", JSON.stringify({ _type: "list" })),
+    ...Array.from({ length: DEFAULT_MAX_REFERENCES + 1 }, (_, i) => file(`documents/items/${i}.json`, JSON.stringify({ _type: "item" }))),
+  ];
+  const { warnings } = build(sources);
+  const cut = warnings.filter((w) => w.message.includes("Left empty, so filled"));
+  assert.deepEqual(cut.map((w) => w.path), ["/documents/list.json"]);
+  assert.match(cut[0].message, new RegExp(`^items: Left empty, so filled with the first ${DEFAULT_MAX_REFERENCES} of ${DEFAULT_MAX_REFERENCES + 1} `));
+});
