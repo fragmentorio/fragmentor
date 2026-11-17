@@ -66,7 +66,13 @@ export function validateProp<T extends Fields>({ value, field, schemas, reset = 
   /* A missing nullable field is off: `write` deletes a key set to null, so this is how a toggled-off field reads back */
   if (value === undefined) return field.nullable ? null as InferField<T> : def_;
 
-  /* An out-of-range min/max is kept when errors are collected (a draft the editor warns about), only strict checks like compile reject it */
+  /* An out-of-range min/max is kept when errors are collected (a draft the editor warns about, a build that reports it and fails), only a strict read (a write) throws */
+  const sized = <V extends unknown[]>(list: V, min?: number, max?: number): V => {
+    if (min !== undefined && list.length < min) return fail(`List length ${list.length} is below minimum ${min}`, list);
+    if (max !== undefined && list.length > max) return fail(`List length ${list.length} exceeds maximum ${max}`, list);
+    return list;
+  };
+
   if (field.type === "string" || field.type === "email") {
     if (typeof value !== "string") return fail(`Expected string, got ${typeof value}`, def_);
     if (field.min !== undefined && value.length < field.min) return fail(`String length ${value.length} is below minimum ${field.min}`, value as InferField<T>);
@@ -95,10 +101,11 @@ export function validateProp<T extends Fields>({ value, field, schemas, reset = 
   }
   else if (field.type === "references") {
     if (!Array.isArray(value)) return fail(`Expected array for references field, got ${typeof value}`, def_);
-    return value.flatMap((item, i) => {
+    const refs = value.flatMap((item, i) => {
       if (!isReference(item)) return fail(`Expected a reference ({ _ref: string }) in references array, got ${kind(item)}`, [], [...path, String(i)]);
       return [{ _ref: item._ref }];
-    }) as InferField<T>;
+    });
+    return sized(refs, field.min, field.max) as InferField<T>;
   }
   else if (field.type === "date" || field.type === "datetime") {
     if (typeof value !== "string") return fail(`Expected string for date, got ${typeof value}`, def_);
@@ -120,7 +127,8 @@ export function validateProp<T extends Fields>({ value, field, schemas, reset = 
   }
   else if (field.type === "fragments" || field.type === "richtext" || field.type === "text") {
     if (!Array.isArray(value)) return fail(`Expected array for ${field.type}, got ${typeof value}`, def_);
-    return value.flatMap((item, i) => fragment(item, [...path, String(i)], `in ${field.type} array`, [], (result) => [result])) as InferField<T>;
+    const list = value.flatMap((item, i) => fragment(item, [...path, String(i)], `in ${field.type} array`, [], (result) => [result]));
+    return (field.type === "text" ? list : sized(list, field.min, field.max)) as InferField<T>;
   }
   return fail(`Unknown field type "${(field as any).type}"`, def_);
 }

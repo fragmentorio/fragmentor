@@ -83,10 +83,23 @@ export function validateField<T extends Fields>({ field, path = [], errors, warn
     if (field.type === "fragments" && field.min && list.length < field.min) {
       list = fail(`Field default length ${list.length} is less than min ${field.min}`, [...list, ...Array.from({ length: field.min - list.length }, () => ({ _type: field.allow[0] ?? "" }))]);
     }
+    /* Rich text has no one type to pad with, so a short default is only reported */
+    if (field.type === "richtext" && field.min !== undefined && list.length < field.min) {
+      list = fail(`Field default length ${list.length} is less than min ${field.min}`, list);
+    }
     if (field.max && list.length > field.max) {
       list = fail(`Field default length ${list.length} is greater than max ${field.max}`, list.slice(0, field.max));
     }
     (field as { default?: unknown }).default = list;
+  }
+  else if (field.type === "references" && field.default) {
+    /* A short default is only reported: there's no id to pad it with */
+    if (field.min !== undefined && field.default.length < field.min) {
+      field.default = fail(`Field default length ${field.default.length} is less than min ${field.min}`, field.default);
+    }
+    if (field.max !== undefined && field.default.length > field.max) {
+      field.default = fail(`Field default length ${field.default.length} is greater than max ${field.max}`, field.default.slice(0, field.max));
+    }
   }
 
   return field;
