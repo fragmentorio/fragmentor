@@ -41,6 +41,18 @@ test("sanitize.schema: an invalid shape is an error", () => {
   assert.equal(errors.length, 1);
 });
 
+test("sanitize.schema: an empty url or email default is allowed, an invalid one is an error", () => {
+  const fields = { link: { type: "url", default: "" }, mail: { type: "email", default: "" } };
+  const schema = sanitize.schema({ entry: { ...meta("/Faq.json"), fields } })!;
+  assert.equal(schema.fields.link.default, "");
+  assert.equal(schema.fields.mail.default, "");
+  for (const field of [{ type: "url", default: "has space" }, { type: "email", default: "nope" }]) {
+    const errors: string[] = [];
+    assert.equal(sanitize.schema({ entry: { ...meta("/Faq.json"), fields: { a: field } }, errors }), null);
+    assert.equal(errors.length, 1);
+  }
+});
+
 test("sanitize.component: `_type` is the file name's last segment", () => {
   assert.equal(sanitize.component({ entry: meta("/Product.Faq.html", "<p></p>") })!._type, "Faq");
 });

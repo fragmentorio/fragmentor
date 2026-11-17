@@ -95,13 +95,15 @@ export type ReferencesField = z.infer<typeof ReferencesFieldSchema>;
 
 export const UrlFieldSchema = BaseFieldSchema.extend({
   type: z.literal("url"),
-  default: UrlSchema.nullable().optional(),
+  /* "" is a url field's empty value (see `empty`), as it is for a document's value */
+  default: UrlSchema.or(z.literal("")).nullable().optional(),
 });
 export type UrlField = z.infer<typeof UrlFieldSchema>;
 
 export const EmailFieldSchema = BaseFieldSchema.extend({
   type: z.literal("email"),
-  default: EmailSchema.nullable().optional(),
+  /* "" is an email field's empty value (see `empty`), as it is for a document's value */
+  default: EmailSchema.or(z.literal("")).nullable().optional(),
   min: z.number().int().min(0).optional(),
   max: z.number().int().min(0).optional(),
 });
