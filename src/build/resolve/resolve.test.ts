@@ -73,7 +73,7 @@ test("complete: warns where a field without a max is filled with more than MANY_
   const authors = Array.from({ length: MANY_REFERENCES + 1 }, (_, i) => doc(`a${i}`, "author"));
   const warnings: string[] = [];
   const out = complete({ document: doc("p", "post", { open: null, capped: null, few: null, blocks: [{ _type: "card", related: null }] }), schemas: [post, card], references: [doc("x", "other"), ...authors], warnings }) as Record<string, any>;
-  const message = (at: string) => `${at}: Null, so filled with all ${authors.length} matching documents. Give it a max to render fewer, or make it nullable`;
+  const message = (at: string) => `${at}: Null, so filled with all ${authors.length} matching documents (set max to render fewer)`;
   assert.deepEqual(warnings, [message("open"), message("blocks.0.related")]);
   assert.equal(out.blocks[0].related.length, authors.length);
 });
