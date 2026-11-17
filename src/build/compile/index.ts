@@ -68,7 +68,12 @@ export function compile(sources: Source[], { parse, dev = false, url, route, pub
 
   const types = [...builtins, ...schemas];
   /* Completed up front so null references fill in on referenced documents too (e.g. a Site's navigation), not only on the page */
-  const completed = documents.map((d) => complete({ document: d, schemas: types, references: documents }) as typeof d);
+  const completed = documents.map((d) => {
+    const many: string[] = [];
+    const document = complete({ document: d, schemas: types, references: documents, warnings: many }) as typeof d;
+    for (const message of many) warnings.push({ path: `/documents${d._path}`, message });
+    return document;
+  });
   const pages = completed.filter((d) => (!route || d._slug === slug(route)) && components.some((c) => c._type === d._type));
 
   /* Resolved through one resolver, a document reached from many pages is one object, so the memo renders it once (see `Memo`) */

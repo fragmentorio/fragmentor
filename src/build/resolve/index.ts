@@ -1,6 +1,7 @@
 import { Document, Fields, Resolve, Schema } from "../../model/types/index.js";
 import { isFragment, isReference } from "../../model/types/index.js";
 import { getSchema } from "../../model/schema.js";
+import { warning } from "../../utils/report.js";
 
 /**
  * Resolves a document's references, replacing every `{ _ref }` with the document it points to (looked up by `_id` in
@@ -55,6 +56,9 @@ export function resolver({ references }: { references: Document[] }): (document:
   return (document) => link(document) as Resolve<Document>;
 }
 
+/* Past this many documents, filling an empty references field without a max is a warning: every page that renders it renders them all */
+export const MANY_REFERENCES = 100;
+
 /**
  * Walks a value against its field definitions, filling in any non-nullable `reference`/`references` field
  * left `null` with matching candidates from `references` (matching `field.allow` when set, capped at
@@ -64,9 +68,11 @@ export function resolver({ references }: { references: Document[] }): (document:
  * @param fields The field definitions for `value`.
  * @param schemas The list of all schemas, used for nested fragments.
  * @param references The candidate documents to fill non-nullable null references with.
+ * @param path The keys from the document to `value`, to say where a field is in a warning.
+ * @param warnings Collects a warning for every field without a `max` filled with more than MANY_REFERENCES documents.
  * @returns The value with eligible null references filled in.
  */
-function completeProp(value: Record<string, unknown>, fields: Record<string, Fields>, schemas: Schema[], references: Document[]): Record<string, unknown> {
+function completeProp(value: Record<string, unknown>, fields: Record<string, Fields>, schemas: Schema[], references: Document[], path: string[], warnings?: string[]): Record<string, unknown> {
   const result: Record<string, unknown> = { ...value };
   for (const [key, field] of Object.entries(fields)) {
     const prop = result[key];
@@ -79,15 +85,19 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
       if (prop === null && !field.nullable) {
         const candidates = references.filter(r => !field.allow.length || field.allow.includes(r._type));
         result[key] = candidates.slice(0, field.max).map(r => ({ _ref: r._id }));
+        /* A field's own max is a choice, so only a large unbounded fill is worth a warning */
+        if (field.max === undefined && candidates.length > MANY_REFERENCES) {
+          warning(`${[...path, key].join(".")}: Left empty, so filled with all ${candidates.length} matching documents. Set a max to render fewer, or make it nullable`, null, warnings);
+        }
       }
     } else if (field.type === "fragment" && isFragment(prop)) {
       const def = getSchema({ schemas, type: prop._type });
-      if (def) result[key] = completeProp(prop, def.fields, schemas, references);
+      if (def) result[key] = completeProp(prop, def.fields, schemas, references, [...path, key], warnings);
     } else if (field.type === "fragments" && Array.isArray(prop)) {
       result[key] = prop.map((item, i) => {
         if (!isFragment(item)) return item;
         const def = getSchema({ schemas, type: item._type });
-        return def ? completeProp(item, def.fields, schemas, references) : item;
+        return def ? completeProp(item, def.fields, schemas, references, [...path, key, String(i)], warnings) : item;
       });
     }
   }
@@ -101,11 +111,12 @@ function completeProp(value: Record<string, unknown>, fields: Record<string, Fie
  * @param document The document to complete.
  * @param schemas The list of all schemas, used to look up field definitions.
  * @param references The candidate documents to fill non-nullable null references with.
+ * @param warnings Collects a warning for every `references` field without a `max` filled with more than MANY_REFERENCES documents.
  * @returns The document with eligible null references filled in.
- * @example complete({ document, schemas, references: documents }) // { ..., related: [{ _ref: "a" }, { _ref: "b" }] }
+ * @example complete({ document, schemas, references: documents, warnings }) // warnings: ["related: Left empty, so filled with all 143 matching documents. ..."]
  */
-export function complete({ document, schemas, references }: { document: Document; schemas: Schema[]; references: Document[]; errors?: string[]; warnings?: string[] }): Document {
+export function complete({ document, schemas, references, warnings }: { document: Document; schemas: Schema[]; references: Document[]; errors?: string[]; warnings?: string[] }): Document {
   const def = getSchema({ schemas, type: document._type });
   if (!def) return document;
-  return completeProp(document, def.fields, schemas, references) as Document;
+  return completeProp(document, def.fields, schemas, references, [], warnings) as Document;
 }
