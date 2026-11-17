@@ -8,6 +8,13 @@ export { evaluate };
 /* Attributes a browser loads or navigates to, so a bound value with a javascript:, vbscript: or data: url is dropped from them (see `unsafeUrl`), whatever the field's type */
 const URL_ATTRIBUTES = new Set(["href", "src", "action", "formaction", "xlink:href", "poster", "cite", "background"]);
 
+/* What `apply` needs from whoever renders: how to evaluate an expression against data, render a nested fragment, and mark a fragment's root element */
+export type Context = {
+  evaluate: (expr: string, data: Record<string, unknown>) => unknown;
+  render: (fragment: Record<string, unknown>) => string | undefined;
+  mark: (el: { setAttribute(name: string, value: string): void }, fragment: Record<string, unknown>) => void;
+};
+
 /**
  * Applies a template's directives to `root` in place, in this order:
  * 1. `x-for` rescopes an element to the value: an array repeats it once per item, any other non-null value is its new scope.
@@ -15,23 +22,18 @@ const URL_ATTRIBUTES = new Set(["href", "src", "action", "formaction", "xlink:hr
  * 3. `x-bind` sets the element's text, or renders a fragment (or array of fragments) value through `render` into it.
  * 4. `x-bind:attr` sets an attribute, removing it when the value is null or undefined, or an unsafe url in a url attribute (href, src, ..., see `unsafeUrl`).
  * A `<template>`'s contents get the same directives and data (applied right after `x-for`, see below).
- * @param render Renders a nested fragment (see render.ts).
- * @param mark Marks a fragment's root element with the editor's pointers (a no-op outside dev, see `pointers`).
- * @param top The top-level value being rendered, `$` in every expression (see `evaluate`). Defaults to `data`, which is the top level when called from it.
+ * @param context Evaluates expressions (with `$` already bound by the caller, see `evaluate`), renders nested fragments and marks their root
+ *   elements with the editor's pointers (a no-op outside dev, see `pointers`). See render.ts.
+ * @example apply(parsed, { title: "Hi" }, { evaluate: (expr, data) => evaluate(expr, data), render: () => "", mark: () => {} })
  */
-export function apply(
-  root: Root,
-  data: Record<string, unknown>,
-  render: (fragment: Record<string, unknown>) => string | undefined,
-  mark: (el: { setAttribute(name: string, value: string): void }, fragment: Record<string, unknown>) => void,
-  top: Record<string, unknown> = data
-): void {
+export function apply(root: Root, data: Record<string, unknown>, context: Context): void {
+  const { evaluate, render, mark } = context;
   for (const el of root.querySelectorAll("[x-for]")) {
     const expr = el.getAttribute("x-for")!;
     el.removeAttribute("x-for");
     /* x-bind on the same element wins */
     if (el.getAttribute("x-bind") != null) continue;
-    const items = evaluate(expr, data, top);
+    const items = evaluate(expr, data);
     if (Array.isArray(items)) {
       /* Every clone after the first gets the whitespace before the original, so items keep the template's indentation */
       const before = el.previousSibling;
@@ -40,13 +42,13 @@ export function apply(
         const clone = el.cloneNode(true);
         if (isFragment(item)) mark(clone, item);
         /* The repeated element's own x-bind:attr reads the item, like its children do (querySelectorAll never matches the root itself) */
-        bind(clone, item as Record<string, unknown>, top);
-        apply(clone, item as Record<string, unknown>, render, mark, top);
+        bind(clone, item as Record<string, unknown>, evaluate);
+        apply(clone, item as Record<string, unknown>, context);
         return i && indent ? [indent, clone] : [clone];
       }));
     } else if (items != null) {
-      bind(el, items as Record<string, unknown>, top);
-      apply(el, items as Record<string, unknown>, render, mark, top);
+      bind(el, items as Record<string, unknown>, evaluate);
+      apply(el, items as Record<string, unknown>, context);
     }
   }
 
@@ -60,17 +62,17 @@ export function apply(
   for (const el of root.querySelectorAll("template")) {
     const template = el as Elem & { content?: Root; firstElementChild?: unknown };
     const content = template.firstElementChild ? template : template.content;
-    if (content) apply(content, data, render, mark, top);
+    if (content) apply(content, data, context);
   }
 
   for (const el of root.querySelectorAll("[x-if]")) {
-    if (evaluate(el.getAttribute("x-if")!, data, top)) el.removeAttribute("x-if");
+    if (evaluate(el.getAttribute("x-if")!, data)) el.removeAttribute("x-if");
     else el.remove();
   }
 
   for (const el of root.querySelectorAll("[x-bind]")) {
     const expr = el.getAttribute("x-bind")!;
-    const value = evaluate(expr, data, top);
+    const value = evaluate(expr, data);
     const unresolved = (f: Record<string, unknown>) => `<!-- unresolved type: ${f._type} -->`;
     if (isFragment(value)) el.innerHTML = render(value) ?? unresolved(value);
     else if (Array.isArray(value) && value.every(isFragment)) el.innerHTML = value.map((v) => render(v) ?? unresolved(v)).join("");
@@ -78,14 +80,14 @@ export function apply(
     el.removeAttribute("x-bind");
   }
 
-  for (const el of root.querySelectorAll("*")) bind(el, data, top);
+  for (const el of root.querySelectorAll("*")) bind(el, data, evaluate);
 }
 
 /* Applies an element's own `x-bind:attr` directives against `data` (see `apply`, step 4) */
-function bind(el: Elem, data: Record<string, unknown>, top: Record<string, unknown>): void {
+function bind(el: Elem, data: Record<string, unknown>, evaluate: Context["evaluate"]): void {
   for (const { name, value } of [...el.attributes]) {
     if (!name.startsWith("x-bind:") || name === "x-bind:") continue;
-    const result = evaluate(value, data, top);
+    const result = evaluate(value, data);
     const attr = name.slice("x-bind:".length);
     if (result == null || (URL_ATTRIBUTES.has(attr.toLowerCase()) && unsafeUrl(String(result)))) el.removeAttribute(attr);
     else el.setAttribute(attr, String(result));

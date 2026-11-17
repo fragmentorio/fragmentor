@@ -6,7 +6,9 @@ import { list } from "../../utils/object.js";
 import type { Component, Schema } from "../../model/types/index.js";
 import { annotate, paths, pointers } from "./annotate.js";
 import { extract } from "./assets.js";
-import { apply } from "./directives.js";
+import { apply, type Context } from "./directives.js";
+import { evaluate, isRooted } from "../../utils/expression.js";
+import type { Memo } from "./memo.js";
 
 /* The minimal DOM surface compile needs, met by both linkedom (server) and the browser's DOM, so core depends on neither */
 export interface Root {
@@ -122,9 +124,11 @@ const templates = [new WeakMap<Component, Rendered>(), new WeakMap<Component, Re
  * @param options.dev Adds the editor's pointers: `x-src` on every template element, and on every fragment's root element its
  *   `x-path` (where it lives in `document`, see `paths`), plus `x-type`/`x-allow` when `schemas` describe its field (see `pointers`).
  * @param options.schemas The project's schemas, for `x-type`/`x-allow`.
+ * @param options.memo Shared by the pages of a build, so a fragment they all render (a navigation, a footer) renders once (see `Memo`).
+ *   Left out in dev, where every fragment's pointers depend on the page.
  * @returns The HTML, or an `<!-- unresolved type -->` comment when the root has no component, and the extracted assets.
  */
-export function render(document: Record<string, unknown>, components: Component[], parse: Parser, { dev = false, schemas }: { dev?: boolean; schemas?: Schema[] } = {}): Rendered {
+export function render(document: Record<string, unknown>, components: Component[], parse: Parser, { dev = false, schemas, memo }: { dev?: boolean; schemas?: Schema[]; memo?: Memo } = {}): Rendered {
   const assets: Record<string, string> = {};
   /* A fragment's path is looked up from where it lives, so it's right however the template reached it. One that's not in the document (built by an expression) has none */
   const found = dev ? paths(document) : null;
@@ -136,7 +140,22 @@ export function render(document: Record<string, unknown>, components: Component[
     for (const [name, value] of Object.entries(point(fragment))) el.setAttribute(name, value);
   };
 
+  /* Every expression sees `document` as `$`, and one that reads it is recorded for the memo, since it can differ on another page */
+  const scoped: Context["evaluate"] = (expr, data) => {
+    const value = evaluate(expr, data, document);
+    if (memo && isRooted(expr)) memo.read({ expr, data, value });
+    return value;
+  };
+
+  /* A nested fragment is rendered once per build when a memo is given (see `Memo`), the page itself always, since no other page renders it */
   const go = (fragment: Record<string, unknown>, ancestors: string[]): string | undefined => {
+    if (!memo || !ancestors.length) return draw(fragment, ancestors);
+    const done = memo.run(fragment, ancestors, (read) => evaluate(read.expr, read.data, document), () => draw(fragment, ancestors));
+    for (const added of done.assets) Object.assign(assets, added);
+    return done.html;
+  };
+
+  const draw = (fragment: Record<string, unknown>, ancestors: string[]): string | undefined => {
     const type = String(fragment._type);
     if (ancestors.length >= MAX_DEPTH) return `<!-- too deep: ${type} -->`;
     const component = lookup(components, type, ancestors);
@@ -150,8 +169,9 @@ export function render(document: Record<string, unknown>, components: Component[
     let template = cache.get(component);
     if (!template) cache.set(component, (template = extract(dev ? annotate(component._data, type) : component._data, parse)));
     Object.assign(assets, template.assets);
+    memo?.add(template.assets);
     const parsed = parse(template.html);
-    apply(parsed, fragment, nested, mark, document); /* the top-level value, `$` in every expression of every nested fragment */
+    apply(parsed, fragment, { evaluate: scoped, render: nested, mark });
     for (const el of parsed.children) mark(el, fragment);
     return parsed.toString();
   };

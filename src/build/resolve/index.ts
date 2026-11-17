@@ -16,6 +16,18 @@ import { getSchema } from "../../model/schema.js";
  * @returns The document with every `_ref` replaced by its resolved document.
  */
 export function resolve({ document, references }: { document: Document; references: Document[]; errors?: string[]; warnings?: string[] }): Resolve<Document> {
+  return resolver({ references })(document);
+}
+
+/**
+ * Like `resolve`, for many documents that share their resolved objects: a document resolved for one page is the same object on
+ * every other page that reaches it. That makes a fragment's identity mean "the same data" across a build, which `render` relies on
+ * to reuse what it rendered (see `Memo`). Resolved objects are never changed afterwards (expressions can't, see `evaluate`).
+ * @param references The list of all documents, used to look up each `_ref`.
+ * @returns A function resolving one document, as `resolve` does.
+ * @example const resolve = resolver({ references: documents }); resolve(home).site === resolve(about).site // true
+ */
+export function resolver({ references }: { references: Document[] }): (document: Document) => Resolve<Document> {
   const byId = new Map(references.map(d => [d._id, d]));
   const resolved = new Map<string, Record<string, unknown>>();
 
@@ -39,7 +51,8 @@ export function resolve({ document, references }: { document: Document; referenc
     return value;
   };
 
-  return link(document) as Resolve<Document>;
+  /* A document reached earlier through a reference is already linked, so it comes back as that same object */
+  return (document) => link(document) as Resolve<Document>;
 }
 
 /* How many documents `complete` fills a non-nullable `references` field without a `max` with. Set a max to get more (or fewer) */

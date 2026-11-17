@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { complete, resolve, DEFAULT_MAX_REFERENCES } from "./index.js";
+import { complete, resolve, resolver, DEFAULT_MAX_REFERENCES } from "./index.js";
 import type { Document, Schema } from "../../model/types/index.js";
 
 const doc = (_id: string, _type: string, data: Record<string, unknown> = {}) => ({ _id, _type, _path: `/${_id}.yml`, _extension: "yml", _hidden: false, _data: "", _size: 0, _raw: null, _created_at: "", _updated_at: "", ...data }) as Document;
@@ -48,4 +48,16 @@ test("complete: a non-nullable null references field gets up to `max` candidates
   assert.deepEqual(out.capped, [{ _ref: "a0" }, { _ref: "a1" }]);
   assert.equal(out.open.length, DEFAULT_MAX_REFERENCES);
   assert.deepEqual(out.open[0], { _ref: "a0" });
+});
+
+test("resolver: a document reached from two pages is the same object on both, as is a page reached from another", () => {
+  const site = doc("site", "site", { name: "Acme" });
+  const home = doc("home", "page", { site: { _ref: "site" }, next: { _ref: "about" } });
+  const about = doc("about", "page", { site: { _ref: "site" } });
+  const resolve = resolver({ references: [site, home, about] });
+  const a = resolve(home) as Record<string, any>;
+  const b = resolve(about) as Record<string, any>;
+  assert.equal(a.site, b.site);
+  assert.equal(a.next, b);
+  assert.equal(b.site.name, "Acme");
 });

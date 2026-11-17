@@ -7,6 +7,7 @@ import { compile, type Parser } from "./index.js";
 import { MAX_DEPTH } from "./render.js";
 import { paths, pointers } from "./annotate.js";
 import { evaluate } from "./directives.js";
+import { isRooted } from "../../utils/expression.js";
 
 /* linkedom only loads as ESM, so it's imported dynamically from this CommonJS package */
 let parse: Parser;
@@ -383,4 +384,42 @@ test("compile: a page past MAX_ELEMENTS elements is a warning on its document, a
   const { warnings } = build(sources);
   assert.deepEqual(warnings.map((w) => w.path), ["/documents/big.json"]);
   assert.match(warnings[0].message, new RegExp(`^The page has ${MAX_ELEMENTS + 1} elements`));
+});
+
+test("evaluate: an array method that changes its array runs on a copy, with the same result and the data left as it was", () => {
+  const data = { items: [3, 1, 2], path: "a/b" };
+  assert.deepEqual(evaluate("items.sort()", data), [1, 2, 3]);
+  assert.deepEqual(evaluate("items.reverse()", data), [2, 1, 3]);
+  assert.equal(evaluate("items.pop()", data), 2);
+  assert.equal(evaluate("path.split('/').pop()", data), "b");
+  assert.deepEqual(data.items, [3, 1, 2]);
+});
+
+test("isRooted: an expression reading `$` anywhere is rooted, one reading only its data isn't", () => {
+  assert.deepEqual(["$.title", "title || $.name", "items[$.index]", "title", "'$'", "broken("].map(isRooted), [true, true, true, false, false, false]);
+});
+
+test("compile: a fragment that several pages render the same way renders once, and again where a `$` it reads differs", () => {
+  const sources = (titles: string[]) => [
+    ...schemas,
+    file("components/page.html", `<h1 x-bind="title"></h1><div x-bind="author"></div>`),
+    file("components/author.html", `<p class="byline"><b x-bind="name"></b> <i x-bind="$.title === 'Home' ? 'home' : 'other'"></i></p>`),
+    file("documents/ada.json", JSON.stringify({ _type: "author", name: "Ada" })),
+    ...titles.map((title, i) => file(`documents/p${i}.json`, JSON.stringify({ _type: "page", title, author: { _ref: "/documents/ada" } }))),
+  ];
+  /* Parses of the author template: once to extract its assets, once for ada's own page, then once per nested render */
+  const count = (titles: string[]) => {
+    let renders = 0;
+    const { output } = compile(sources(titles), { parse: (html) => (html.includes("byline") && renders++, parse(html)) });
+    return { renders: renders - 2, pages: titles.map((_, i) => output.find((s) => s.path === `/p${i}/index.html`)?.data) };
+  };
+
+  const same = count(["A", "B", "C"]);
+  assert.equal(same.renders, 1);
+  for (const html of same.pages) assert.match(String(html), /<b>Ada<\/b> <i>other<\/i>/);
+
+  const differs = count(["Home", "B", "C"]);
+  assert.equal(differs.renders, 2);
+  assert.match(String(differs.pages[0]), /<i>home<\/i>/);
+  assert.match(String(differs.pages[1]), /<i>other<\/i>/);
 });
