@@ -215,3 +215,62 @@ test("validate.fields: a fragments default drops the types it doesn't take, then
     'fields.cover: Field default: Expected an image (img) fragment, got "tag"',
   ]);
 });
+
+test("validateProp: a references, fragments or richtext list out of its min/max is kept and reported, or throws without `errors`", () => {
+  const all = [...builtins, tag];
+  const refs = { type: "references", allow: [], min: 1, max: 2 } as Fields;
+  const tags = { type: "fragments", allow: ["tag"], min: 1, max: 2, default: [] } as Fields;
+  const body = { type: "richtext", min: 1, max: 1, default: [] } as unknown as Fields;
+  const three = [{ _ref: "a" }, { _ref: "b" }, { _ref: "c" }];
+  const p = { _type: "p", children: [] };
+  const errors: string[] = [];
+  assert.deepEqual(validateProp({ value: three, field: refs, schemas: all, errors }), three);
+  assert.deepEqual(validateProp({ value: [], field: tags, schemas: all, errors }), []);
+  assert.deepEqual(validateProp({ value: [p, p], field: body, schemas: all, errors }), [p, p]);
+  assert.deepEqual(validateProp({ value: [{ _ref: "a" }], field: refs, schemas: all, errors }), [{ _ref: "a" }]);
+  assert.deepEqual(errors, ["List length 3 exceeds maximum 2", "List length 0 is below minimum 1", "List length 2 exceeds maximum 1"]);
+  assert.throws(() => validateProp({ value: three, field: refs, schemas: all }), /List length 3 exceeds maximum 2/);
+});
+
+test("validateProp: a list's length is counted after dropping the items that don't belong", () => {
+  const errors: string[] = [];
+  const field = { type: "fragments", allow: ["tag"], min: 2, default: [] } as Fields;
+  validateProp({ value: [{ _type: "tag", name: "x" }, { _type: "post" }], field, schemas, errors });
+  assert.equal(errors.length, 2);
+  assert.match(errors[0], /"post" is not allowed/);
+  assert.equal(errors[1], "List length 1 is below minimum 2");
+});
+
+test("validate.fields: a references default is cut to max and a short one only reported, like a richtext default below min", () => {
+  const errors: string[] = [];
+  const fields = validate.fields({ errors, fields: {
+    refs: { type: "references", allow: [], max: 1, default: ["a", "b"] } as Fields,
+    few: { type: "references", allow: [], min: 2, default: ["a"] } as Fields,
+    body: { type: "richtext", min: 1, default: [] } as unknown as Fields,
+  } });
+  assert.deepEqual(fields.refs.default, ["a"]);
+  assert.deepEqual(fields.few.default, ["a"]);
+  assert.deepEqual(fields.body.default, []);
+  assert.deepEqual(errors, [
+    "fields.refs: Field default length 2 is greater than max 1",
+    "fields.few: Field default length 1 is less than min 2",
+    "fields.body: Field default length 0 is less than min 1",
+  ]);
+});
+
+test("validate.fields: a min or max of 0 is checked like any other", () => {
+  const errors: string[] = [];
+  const fields = validate.fields({ errors, fields: {
+    code: { type: "string", max: 0, default: "x" } as Fields,
+    count: { type: "number", min: 0, default: -1 } as Fields,
+    tags: { type: "fragments", allow: ["tag"], max: 0, default: [{ _type: "tag" }] } as Fields,
+  } });
+  assert.equal(fields.code.default, "");
+  assert.equal(fields.count.default, 0);
+  assert.deepEqual(fields.tags.default, []);
+  assert.deepEqual(errors, [
+    "fields.code: Field default length 1 is greater than max 0",
+    "fields.count: Field default -1 is less than min 0",
+    "fields.tags: Field default length 1 is greater than max 0",
+  ]);
+});

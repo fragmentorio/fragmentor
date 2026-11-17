@@ -43,10 +43,10 @@ export function validateField<T extends Fields>({ field, path = [], errors, warn
   }
 
   if (field.type === "string") {
-    if (field.min && field.default!.length < field.min) {
+    if (field.min !== undefined && field.default!.length < field.min) {
       field.default = fail(`Field default length ${field.default!.length} is less than min ${field.min}`, field.default!.padEnd(field.min, " "));
     }
-    if (field.max && field.default!.length > field.max) {
+    if (field.max !== undefined && field.default!.length > field.max) {
       field.default = fail(`Field default length ${field.default!.length} is greater than max ${field.max}`, field.default!.substring(0, field.max));
     }
   }
@@ -56,10 +56,10 @@ export function validateField<T extends Fields>({ field, path = [], errors, warn
     }
   }
   else if (field.type === "number") {
-    if (field.min && field.default! < field.min) {
+    if (field.min !== undefined && field.default! < field.min) {
       field.default = fail(`Field default ${field.default} is less than min ${field.min}`, field.min);
     }
-    if (field.max && field.default! > field.max) {
+    if (field.max !== undefined && field.default! > field.max) {
       field.default = fail(`Field default ${field.default} is greater than max ${field.max}`, field.max);
     }
   }
@@ -80,13 +80,26 @@ export function validateField<T extends Fields>({ field, path = [], errors, warn
     const reason = (f: Fragment) => rejects(field, f._type);
     const first = list.map(reason).find(Boolean);
     if (first) list = fail(`Field default: ${first}`, list.filter((f) => !reason(f)));
-    if (field.type === "fragments" && field.min && list.length < field.min) {
+    if (field.type === "fragments" && field.min !== undefined && list.length < field.min) {
       list = fail(`Field default length ${list.length} is less than min ${field.min}`, [...list, ...Array.from({ length: field.min - list.length }, () => ({ _type: field.allow[0] ?? "" }))]);
     }
-    if (field.max && list.length > field.max) {
+    /* Rich text has no one type to pad with, so a short default is only reported */
+    if (field.type === "richtext" && field.min !== undefined && list.length < field.min) {
+      list = fail(`Field default length ${list.length} is less than min ${field.min}`, list);
+    }
+    if (field.max !== undefined && list.length > field.max) {
       list = fail(`Field default length ${list.length} is greater than max ${field.max}`, list.slice(0, field.max));
     }
     (field as { default?: unknown }).default = list;
+  }
+  else if (field.type === "references" && field.default) {
+    /* A short default is only reported: there's no id to pad it with */
+    if (field.min !== undefined && field.default.length < field.min) {
+      field.default = fail(`Field default length ${field.default.length} is less than min ${field.min}`, field.default);
+    }
+    if (field.max !== undefined && field.default.length > field.max) {
+      field.default = fail(`Field default length ${field.default.length} is greater than max ${field.max}`, field.default.slice(0, field.max));
+    }
   }
 
   return field;
